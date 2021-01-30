@@ -1,4 +1,5 @@
 import resolveExtends, {ResolveExtendsContext} from '.';
+import {UserConfig} from '@commitlint/types';
 
 const id = (id: unknown) => id;
 
@@ -213,17 +214,17 @@ test('propagates contents recursively', () => {
 });
 
 test('propagates contents recursively with overlap', () => {
-	const input = {extends: ['extender-name']};
+	const input: UserConfig = {extends: ['extender-name']};
 
-	const require = (id: string) => {
+	const require = (id: string): UserConfig => {
 		switch (id) {
 			case 'extender-name':
 				return {
 					extends: ['recursive-extender-name'],
-					rules: {rule: ['zero', 'one']},
+					rules: {rule: [1, 'always']},
 				};
 			case 'recursive-extender-name':
-				return {rules: {rule: ['two', 'three', 'four']}};
+				return {rules: {rule: [2, 'never', 'four']}};
 			default:
 				return {};
 		}
@@ -233,10 +234,10 @@ test('propagates contents recursively with overlap', () => {
 
 	const actual = resolveExtends(input, ctx);
 
-	const expected = {
+	const expected: UserConfig = {
 		extends: ['extender-name'],
 		rules: {
-			rule: ['zero', 'one'],
+			rule: [1, 'always'],
 		},
 	};
 
@@ -244,14 +245,14 @@ test('propagates contents recursively with overlap', () => {
 });
 
 test('extends rules from left to right with overlap', () => {
-	const input = {extends: ['left', 'right']};
+	const input: UserConfig = {extends: ['left', 'right']};
 
-	const require = (id: string) => {
+	const require = (id: string): UserConfig => {
 		switch (id) {
 			case 'left':
-				return {rules: {a: true}};
+				return {rules: {a: [0, 'never', true]}};
 			case 'right':
-				return {rules: {a: false, b: true}};
+				return {rules: {a: [0, 'never', false], b: [0, 'never', true]}};
 			default:
 				return {};
 		}
@@ -261,11 +262,11 @@ test('extends rules from left to right with overlap', () => {
 
 	const actual = resolveExtends(input, ctx);
 
-	const expected = {
+	const expected: UserConfig = {
 		extends: ['left', 'right'],
 		rules: {
-			a: false,
-			b: true,
+			a: [0, 'never', false],
+			b: [0, 'never', true],
 		},
 	};
 
@@ -321,11 +322,7 @@ test('should fall back to conventional-changelog-lint-config prefix', () => {
 	const require = (id: string) => {
 		switch (id) {
 			case 'conventional-changelog-lint-config-extender-name':
-				return {
-					rules: {
-						fallback: true,
-					},
-				};
+				return {rules: {fallback: true}};
 			default:
 				return {};
 		}
@@ -347,4 +344,156 @@ test('should fall back to conventional-changelog-lint-config prefix', () => {
 			fallback: true,
 		},
 	});
+});
+
+test('plugins should be merged correctly', () => {
+	const input = {extends: ['extender-name'], zero: 'root'};
+
+	const require = (id: string) => {
+		switch (id) {
+			case 'extender-name':
+				return {extends: ['recursive-extender-name'], plugins: ['test']};
+			case 'recursive-extender-name':
+				return {
+					extends: ['second-recursive-extender-name'],
+					plugins: ['test2'],
+				};
+			case 'second-recursive-extender-name':
+				return {plugins: ['test3']};
+			default:
+				return {};
+		}
+	};
+
+	const ctx = {resolve: id, require: jest.fn(require)} as ResolveExtendsContext;
+
+	const actual = resolveExtends(input, ctx);
+
+	const expected = {
+		extends: ['extender-name'],
+		plugins: ['test3', 'test2', 'test'],
+		zero: 'root',
+	};
+
+	expect(actual).toEqual(expected);
+});
+
+test('rules should be merged correctly', () => {
+	const input: UserConfig = {
+		extends: ['extender-name'],
+		rules: {test1: [1, 'never', 'base']},
+	};
+
+	const require = (id: string): UserConfig => {
+		switch (id) {
+			case 'extender-name':
+				return {
+					extends: ['recursive-extender-name'],
+					rules: {test2: [2, 'never', id]},
+				};
+			case 'recursive-extender-name':
+				return {
+					extends: ['second-recursive-extender-name'],
+					rules: {test1: [0, 'never', id]},
+				};
+			case 'second-recursive-extender-name':
+				return {rules: {test2: [1, 'never', id]}};
+			default:
+				return {};
+		}
+	};
+
+	const ctx = {resolve: id, require: jest.fn(require)} as ResolveExtendsContext;
+
+	const actual = resolveExtends(input, ctx);
+
+	const expected: UserConfig = {
+		extends: ['extender-name'],
+		rules: {
+			test1: [1, 'never', 'base'],
+			test2: [2, 'never', 'extender-name'],
+		},
+	};
+
+	expect(actual).toEqual(expected);
+});
+
+// https://github.com/conventional-changelog/commitlint/issues/327
+test('parserPreset should resolve correctly in extended configuration', () => {
+	const input = {extends: ['extender-name'], zero: 'root'};
+
+	const require = (id: string) => {
+		switch (id) {
+			case 'extender-name':
+				return {
+					extends: ['recursive-extender-name'],
+					parserPreset: {
+						parserOpts: {
+							issuePrefixes: ['#', '!', '&', 'no-references'],
+							referenceActions: null,
+						},
+					},
+				};
+			case 'recursive-extender-name':
+				return {parserPreset: {parserOpts: {issuePrefixes: ['#', '!']}}};
+			default:
+				return {};
+		}
+	};
+
+	const ctx = {resolve: id, require: jest.fn(require)} as ResolveExtendsContext;
+
+	const actual = resolveExtends(input, ctx);
+
+	const expected = {
+		extends: ['extender-name'],
+		parserPreset: {
+			parserOpts: {
+				issuePrefixes: ['#', '!', '&', 'no-references'],
+				referenceActions: null,
+			},
+		},
+		zero: 'root',
+	};
+
+	expect(actual).toEqual(expected);
+});
+
+test('parserPreset should be merged correctly', () => {
+	const input = {extends: ['extender-name'], zero: 'root'};
+
+	const require = (id: string) => {
+		switch (id) {
+			case 'extender-name':
+				return {
+					extends: ['recursive-extender-name'],
+					parserPreset: {
+						parserOpts: {
+							referenceActions: null,
+						},
+					},
+				};
+			case 'recursive-extender-name':
+				return {parserPreset: {parserOpts: {issuePrefixes: ['#', '!']}}};
+			default:
+				return {};
+		}
+	};
+
+	const ctx = {resolve: id, require: jest.fn(require)} as ResolveExtendsContext;
+
+	const actual = resolveExtends(input, ctx);
+
+	const expected = {
+		extends: ['extender-name'],
+		parserPreset: {
+			parserOpts: {
+				issuePrefixes: ['#', '!'],
+				referenceActions: null,
+			},
+		},
+		zero: 'root',
+	};
+
+	expect(actual).toEqual(expected);
 });

@@ -2,21 +2,11 @@ import path from 'path';
 
 import 'resolve-global';
 import resolveFrom from 'resolve-from';
-import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
+import {validateConfig} from '@commitlint/config-validator';
+import {UserConfig} from '@commitlint/types';
 
 const importFresh = require('import-fresh');
-
-export interface ResolvedConfig {
-	parserPreset?: unknown;
-	[key: string]: unknown;
-}
-
-export interface ResolveExtendsConfig {
-	parserPreset?: unknown;
-	extends?: string | string[];
-	[key: string]: unknown;
-}
 
 export interface ResolveExtendsContext {
 	cwd?: string;
@@ -28,36 +18,40 @@ export interface ResolveExtendsContext {
 }
 
 export default function resolveExtends(
-	config: ResolveExtendsConfig = {},
+	config: UserConfig = {},
 	context: ResolveExtendsContext = {}
-) {
+): UserConfig {
 	const {extends: e} = config;
-	const extended = loadExtends(config, context).reduce(
+	const extended = loadExtends(config, context);
+	extended.push(config);
+	return extended.reduce(
 		(r, {extends: _, ...c}) =>
-			mergeWith(r, c, (objValue, srcValue) => {
-				if (Array.isArray(objValue)) {
+			mergeWith(r, c, (objValue, srcValue, key) => {
+				if (key === 'plugins') {
+					if (Array.isArray(objValue)) {
+						return objValue.concat(srcValue);
+					}
+				} else if (Array.isArray(objValue)) {
 					return srcValue;
 				}
 			}),
 		e ? {extends: e} : {}
 	);
-
-	return merge({}, extended, config);
 }
 
 function loadExtends(
-	config: ResolveExtendsConfig = {},
+	config: UserConfig = {},
 	context: ResolveExtendsContext = {}
-): ResolvedConfig[] {
+): UserConfig[] {
 	const {extends: e} = config;
 	const ext = e ? (Array.isArray(e) ? e : [e]) : [];
 
-	return ext.reduce<ResolvedConfig[]>((configs, raw) => {
+	return ext.reduceRight<UserConfig[]>((configs, raw) => {
 		const load = context.require || require;
 		const resolved = resolveConfig(raw, context);
 		const c = load(resolved);
 		const cwd = path.dirname(resolved);
-		const ctx = merge({}, context, {cwd});
+		const ctx = {...context, cwd};
 
 		// Resolve parser preset if none was present before
 		if (
@@ -78,7 +72,9 @@ function loadExtends(
 			config.parserPreset = parserPreset;
 		}
 
-		return [...configs, ...loadExtends(c, ctx), c];
+		validateConfig(resolved, config);
+
+		return [...loadExtends(c, ctx), c, ...configs];
 	}, []);
 }
 

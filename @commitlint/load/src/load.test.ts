@@ -21,6 +21,7 @@ test('extends-empty should have no rules', async () => {
 	const actual = await load({}, {cwd});
 
 	expect(actual.rules).toMatchObject({});
+	expect(actual.parserPreset).not.toBeDefined();
 });
 
 test('uses seed as configured', async () => {
@@ -127,8 +128,9 @@ test('uses seed with parserPreset', async () => {
 		{cwd}
 	);
 
-	expect(actual.name).toBe('./conventional-changelog-custom');
-	expect(actual.parserOpts).toMatchObject({
+	expect(actual).toBeDefined();
+	expect(actual!.name).toBe('./conventional-changelog-custom');
+	expect(actual!.parserOpts).toMatchObject({
 		headerPattern: /^(\w*)(?:\((.*)\))?-(.*)$/,
 	});
 });
@@ -162,8 +164,8 @@ test('respects cwd option', async () => {
 		extends: ['./second-extended'],
 		plugins: {},
 		rules: {
-			one: 1,
-			two: 2,
+			one: [1, 'always'],
+			two: [2, 'never'],
 		},
 	});
 });
@@ -177,9 +179,9 @@ test('recursive extends', async () => {
 		extends: ['./first-extended'],
 		plugins: {},
 		rules: {
-			zero: 0,
-			one: 1,
-			two: 2,
+			zero: [0, 'never'],
+			one: [1, 'always'],
+			two: [2, 'never'],
 		},
 	});
 });
@@ -193,9 +195,9 @@ test('recursive extends with json file', async () => {
 		extends: ['./first-extended'],
 		plugins: {},
 		rules: {
-			zero: 0,
-			one: 1,
-			two: 2,
+			zero: [0, 'never'],
+			one: [1, 'always'],
+			two: [2, 'never'],
 		},
 	});
 });
@@ -209,9 +211,9 @@ test('recursive extends with yaml file', async () => {
 		extends: ['./first-extended'],
 		plugins: {},
 		rules: {
-			zero: 0,
-			one: 1,
-			two: 2,
+			zero: [0, 'never'],
+			one: [1, 'never'],
+			two: [2, 'always'],
 		},
 	});
 });
@@ -225,9 +227,9 @@ test('recursive extends with js file', async () => {
 		extends: ['./first-extended'],
 		plugins: {},
 		rules: {
-			zero: 0,
-			one: 1,
-			two: 2,
+			zero: [0, 'never'],
+			one: [1, 'never'],
+			two: [2, 'always'],
 		},
 	});
 });
@@ -241,9 +243,9 @@ test('recursive extends with package.json file', async () => {
 		extends: ['./first-extended'],
 		plugins: {},
 		rules: {
-			zero: 0,
-			one: 1,
-			two: 2,
+			zero: [0, 'never'],
+			one: [1, 'never'],
+			two: [2, 'never'],
 		},
 	});
 });
@@ -252,8 +254,9 @@ test('parser preset overwrites completely instead of merging', async () => {
 	const cwd = await gitBootstrap('fixtures/parser-preset-override');
 	const actual = await load({}, {cwd});
 
-	expect(actual.parserPreset.name).toBe('./custom');
-	expect(actual.parserPreset.parserOpts).toMatchObject({
+	expect(actual.parserPreset).toBeDefined();
+	expect(actual.parserPreset!.name).toBe('./custom');
+	expect(actual.parserPreset!.parserOpts).toMatchObject({
 		headerPattern: /.*/,
 	});
 });
@@ -262,13 +265,14 @@ test('recursive extends with parserPreset', async () => {
 	const cwd = await gitBootstrap('fixtures/recursive-parser-preset');
 	const actual = await load({}, {cwd});
 
-	expect(actual.parserPreset.name).toBe('./conventional-changelog-custom');
-	expect(actual.parserPreset.parserOpts).toMatchObject({
+	expect(actual.parserPreset).toBeDefined();
+	expect(actual.parserPreset!.name).toBe('./conventional-changelog-custom');
+	expect(actual.parserPreset!.parserOpts).toMatchObject({
 		headerPattern: /^(\w*)(?:\((.*)\))?-(.*)$/,
 	});
 });
 
-test('ignores unknow keys', async () => {
+test('ignores unknown keys', async () => {
 	const cwd = await gitBootstrap('fixtures/trash-file');
 	const actual = await load({}, {cwd});
 
@@ -277,13 +281,13 @@ test('ignores unknow keys', async () => {
 		extends: [],
 		plugins: {},
 		rules: {
-			foo: 'bar',
-			baz: 'bar',
+			foo: [1, 'always', 'bar'],
+			baz: [1, 'always', 'bar'],
 		},
 	});
 });
 
-test('ignores unknow keys recursively', async () => {
+test('ignores unknown keys recursively', async () => {
 	const cwd = await gitBootstrap('fixtures/trash-extend');
 	const actual = await load({}, {cwd});
 
@@ -292,8 +296,8 @@ test('ignores unknow keys recursively', async () => {
 		extends: ['./one'],
 		plugins: {},
 		rules: {
-			zero: 0,
-			one: 1,
+			zero: [0, 'always', 'zero'],
+			one: [1, 'always', 'one'],
 		},
 	});
 });
@@ -309,9 +313,9 @@ test('find up from given cwd', async () => {
 		extends: [],
 		plugins: {},
 		rules: {
-			child: true,
-			inner: false,
-			outer: false,
+			child: [2, 'always', true],
+			inner: [2, 'always', false],
+			outer: [2, 'always', false],
 		},
 	});
 });
@@ -326,9 +330,9 @@ test('find up config from outside current git repo', async () => {
 		extends: [],
 		plugins: {},
 		rules: {
-			child: false,
-			inner: false,
-			outer: true,
+			child: [1, 'never', false],
+			inner: [1, 'never', false],
+			outer: [1, 'never', true],
 		},
 	});
 });
@@ -386,11 +390,12 @@ test('resolves parser preset from conventional commits', async () => {
 	const cwd = await npmBootstrap('fixtures/parser-preset-conventionalcommits');
 	const actual = await load({}, {cwd});
 
-	expect(actual.parserPreset.name).toBe(
+	expect(actual.parserPreset).toBeDefined();
+	expect(actual.parserPreset!.name).toBe(
 		'conventional-changelog-conventionalcommits'
 	);
-	expect(typeof actual.parserPreset.parserOpts).toBe('object');
-	expect((actual.parserPreset.parserOpts as any).headerPattern).toEqual(
+	expect(typeof actual.parserPreset!.parserOpts).toBe('object');
+	expect((actual.parserPreset!.parserOpts as any).headerPattern).toEqual(
 		/^(\w*)(?:\((.*)\))?!?: (.*)$/
 	);
 });
@@ -399,9 +404,10 @@ test('resolves parser preset from conventional angular', async () => {
 	const cwd = await npmBootstrap('fixtures/parser-preset-angular');
 	const actual = await load({}, {cwd});
 
-	expect(actual.parserPreset.name).toBe('conventional-changelog-angular');
-	expect(typeof actual.parserPreset.parserOpts).toBe('object');
-	expect((actual.parserPreset.parserOpts as any).headerPattern).toEqual(
+	expect(actual.parserPreset).toBeDefined();
+	expect(actual.parserPreset!.name).toBe('conventional-changelog-angular');
+	expect(typeof actual.parserPreset!.parserOpts).toBe('object');
+	expect((actual.parserPreset!.parserOpts as any).headerPattern).toEqual(
 		/^(\w*)(?:\((.*)\))?: (.*)$/
 	);
 });
@@ -416,9 +422,10 @@ test('recursive resolves parser preset from conventional atom', async () => {
 
 	const actual = await load({}, {cwd});
 
-	expect(actual.parserPreset.name).toBe('conventional-changelog-atom');
-	expect(typeof actual.parserPreset.parserOpts).toBe('object');
-	expect((actual.parserPreset.parserOpts as any).headerPattern).toEqual(
+	expect(actual.parserPreset).toBeDefined();
+	expect(actual.parserPreset!.name).toBe('conventional-changelog-atom');
+	expect(typeof actual.parserPreset!.parserOpts).toBe('object');
+	expect((actual.parserPreset!.parserOpts as any).headerPattern).toEqual(
 		/^(:.*?:) (.*)$/
 	);
 });
@@ -429,11 +436,12 @@ test('resolves parser preset from conventional commits without factory support',
 	);
 	const actual = await load({}, {cwd});
 
-	expect(actual.parserPreset.name).toBe(
+	expect(actual.parserPreset).toBeDefined();
+	expect(actual.parserPreset!.name).toBe(
 		'conventional-changelog-conventionalcommits'
 	);
-	expect(typeof actual.parserPreset.parserOpts).toBe('object');
-	expect((actual.parserPreset.parserOpts as any).headerPattern).toEqual(
+	expect(typeof actual.parserPreset!.parserOpts).toBe('object');
+	expect((actual.parserPreset!.parserOpts as any).headerPattern).toEqual(
 		/^(\w*)(?:\((.*)\))?!?: (.*)$/
 	);
 });
